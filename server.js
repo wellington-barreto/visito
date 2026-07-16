@@ -45,9 +45,11 @@ const browserQueue = new ConcurrencyQueue({
 // usado pelo /metrics e pelo /dashboard
 const metricsStore = new MetricsStore({ maxRequests: 10, maxMemorySamples: 120 });
 const MEMORY_SAMPLE_INTERVAL_MS = 5000; // uma amostra a cada 5s (~10min de historico com 120 pontos)
-const memorySamplingTimer = setInterval(() => metricsStore.sampleMemory(), MEMORY_SAMPLE_INTERVAL_MS);
+const memorySamplingTimer = setInterval(() => {
+  metricsStore.sampleMemory().catch((err) => console.error('[sampleMemory] erro:', err.message));
+}, MEMORY_SAMPLE_INTERVAL_MS);
 memorySamplingTimer.unref(); // nao impede o processo de encerrar normalmente
-metricsStore.sampleMemory(); // primeira amostra imediata, sem esperar o primeiro intervalo
+metricsStore.sampleMemory().catch((err) => console.error('[sampleMemory] erro:', err.message)); // primeira amostra imediata
 
 // O dashboard e servido SOMENTE pela rota protegida abaixo (nao usamos
 // express.static aqui de proposito: se o HTML ficasse acessivel direto
@@ -65,14 +67,18 @@ app.get('/health', (req, res) => {
 
 // Metricas detalhadas: memoria atual + historico + ultimas requisicoes.
 // PROTEGIDO por api key: expoe URLs acessadas e trackIds, entao nao fica publico.
-app.get('/metrics', requireApiKey, (req, res) => {
-  res.json(
-    metricsStore.getSnapshot({
+app.get('/metrics', requireApiKey, async (req, res) => {
+  try {
+    const snapshot = await metricsStore.getSnapshot({
       active: browserQueue.active,
       pending: browserQueue.pending,
       concurrencyLimit: MAX_CONCURRENT_BROWSERS,
-    })
-  );
+    });
+    res.json(snapshot);
+  } catch (err) {
+    console.error('[metrics] ERRO ao gerar snapshot:', err.message);
+    res.status(500).json({ error: true, message: 'Falha ao coletar metricas.' });
+  }
 });
 
 // Dashboard visual. PROTEGIDO pela mesma api key do /metrics

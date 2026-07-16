@@ -115,14 +115,36 @@
     font-weight: 400;
     margin-left: 4px;
   }
-  .card .accent-teal .value { color: var(--teal); }
-  .card .accent-violet .value { color: var(--violet); }
-  .card .accent-amber .value { color: var(--amber); }
+  .card.accent-teal .value { color: var(--teal); }
+  .card.accent-violet .value { color: var(--violet); }
+  .card.accent-amber .value { color: var(--amber); }
+  .card.accent-amber-strong .value { color: var(--amber); }
+  .card.alert {
+    border-color: var(--red);
+    background: var(--red-dim);
+  }
+  .card.alert .value { color: var(--red); }
   .card .sub-value {
     font-family: var(--mono);
     font-size: 11px;
     color: var(--text-muted);
     margin-top: 6px;
+  }
+
+  .chart-legend {
+    display: flex;
+    gap: 20px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+  }
+  .dot-legend {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
   }
 
   .panel {
@@ -241,9 +263,19 @@
 
     <div class="cards">
       <div class="card accent-teal">
-        <div class="label">Memória (RSS)</div>
+        <div class="label">Memória (RSS do Node)</div>
         <div class="value"><span id="c-rss">—</span><span class="unit">MB</span></div>
         <div class="sub-value" id="c-heap">heap —</div>
+      </div>
+      <div class="card accent-amber-strong">
+        <div class="label">Memória do container</div>
+        <div class="value"><span id="c-container">—</span><span class="unit">MB</span></div>
+        <div class="sub-value" id="c-container-limit">de — MB (<span id="c-container-fonte">—</span>)</div>
+      </div>
+      <div class="card" id="card-chromium">
+        <div class="label">Processos Chromium vivos</div>
+        <div class="value"><span id="c-chromium">—</span></div>
+        <div class="sub-value" id="c-chromium-hint">esperado: 0 quando ocioso</div>
       </div>
       <div class="card accent-violet">
         <div class="label">Browsers ativos</div>
@@ -263,7 +295,11 @@
     </div>
 
     <div class="panel">
-      <h2>Memória (RSS) — últimos ~10 min</h2>
+      <h2>Memória — últimos ~10 min</h2>
+      <div class="chart-legend">
+        <span><i class="dot-legend" style="background:#34d3c6"></i> RSS do processo Node</span>
+        <span><i class="dot-legend" style="background:#f2b84b"></i> Memória total do container</span>
+      </div>
       <div id="chart-wrap">
         <svg id="chart" viewBox="0 0 1000 180" preserveAspectRatio="none"></svg>
       </div>
@@ -331,41 +367,45 @@
     wrap.querySelector('.chart-empty')?.remove();
 
     const W = 1000, H = 180, PAD = 8;
-    const values = history.map(p => p.rssMB);
-    const max = Math.max(...values) * 1.15;
+    const rssValues = history.map(p => p.rssMB);
+    const containerValues = history.map(p => p.containerUsedMB ?? p.rssMB);
+    const max = Math.max(...rssValues, ...containerValues) * 1.15;
     const min = 0;
     const range = max - min || 1;
 
     const stepX = (W - PAD * 2) / (history.length - 1);
-    const points = history.map((p, i) => {
-      const x = PAD + i * stepX;
-      const y = H - PAD - ((p.rssMB - min) / range) * (H - PAD * 2);
-      return [x, y];
-    });
+    const toY = (v) => H - PAD - ((v - min) / range) * (H - PAD * 2);
 
-    const linePath = points.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(' ');
-    const areaPath = `${linePath} L${points[points.length - 1][0]},${H - PAD} L${points[0][0]},${H - PAD} Z`;
+    const rssPoints = rssValues.map((v, i) => [PAD + i * stepX, toY(v)]);
+    const containerPoints = containerValues.map((v, i) => [PAD + i * stepX, toY(v)]);
 
-    // linhas de grade horizontais (25/50/75/100%)
+    const toPath = (points) => points.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(' ');
+    const rssLine = toPath(rssPoints);
+    const containerLine = toPath(containerPoints);
+    const rssArea = `${rssLine} L${rssPoints[rssPoints.length - 1][0]},${H - PAD} L${rssPoints[0][0]},${H - PAD} Z`;
+
     let gridLines = '';
     for (let f = 0.25; f < 1; f += 0.25) {
       const y = H - PAD - f * (H - PAD * 2);
       gridLines += `<line x1="${PAD}" y1="${y}" x2="${W - PAD}" y2="${y}" stroke="#212938" stroke-width="1" stroke-dasharray="4 4" />`;
     }
 
-    const lastPoint = points[points.length - 1];
+    const lastRss = rssPoints[rssPoints.length - 1];
+    const lastContainer = containerPoints[containerPoints.length - 1];
 
     svg.innerHTML = `
       <defs>
         <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#34d3c6" stop-opacity="0.35" />
+          <stop offset="0%" stop-color="#34d3c6" stop-opacity="0.3" />
           <stop offset="100%" stop-color="#34d3c6" stop-opacity="0" />
         </linearGradient>
       </defs>
       ${gridLines}
-      <path d="${areaPath}" fill="url(#areaFill)" />
-      <path d="${linePath}" fill="none" stroke="#34d3c6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
-      <circle cx="${lastPoint[0]}" cy="${lastPoint[1]}" r="3.5" fill="#34d3c6" />
+      <path d="${rssArea}" fill="url(#areaFill)" />
+      <path d="${containerLine}" fill="none" stroke="#f2b84b" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="3 3" opacity="0.85" />
+      <path d="${rssLine}" fill="none" stroke="#34d3c6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+      <circle cx="${lastRss[0]}" cy="${lastRss[1]}" r="3.5" fill="#34d3c6" />
+      <circle cx="${lastContainer[0]}" cy="${lastContainer[1]}" r="3" fill="#f2b84b" />
     `;
   }
 
@@ -437,6 +477,30 @@
 
       document.getElementById('c-rss').textContent = data.memoriaAtualMB.rss;
       document.getElementById('c-heap').textContent = `heap ${data.memoriaAtualMB.heapUsed} / ${data.memoriaAtualMB.heapTotal} MB`;
+
+      document.getElementById('c-container').textContent = data.memoriaAtualMB.containerUsada;
+      document.getElementById('c-container-limit').textContent = data.memoriaAtualMB.containerLimite
+        ? `de ${data.memoriaAtualMB.containerLimite} MB (${data.memoriaAtualMB.fonte})`
+        : `sem limite definido (${data.memoriaAtualMB.fonte})`;
+
+      const chromiumCard = document.getElementById('card-chromium');
+      const chromiumEl = document.getElementById('c-chromium');
+      const chromiumHint = document.getElementById('c-chromium-hint');
+      if (data.chromiumProcessCount === null) {
+        chromiumEl.textContent = '—';
+        chromiumHint.textContent = 'não foi possível ler /proc';
+        chromiumCard.classList.remove('alert');
+      } else {
+        chromiumEl.textContent = data.chromiumProcessCount;
+        // so acende alerta se tiver processo chromium vivo MAS nenhum browser
+        // registrado como ativo na fila -> sinal de processo orfao/vazamento
+        const suspeitoDeVazamento = data.chromiumProcessCount > 0 && data.queue.browsersAtivos === 0;
+        chromiumHint.textContent = suspeitoDeVazamento
+          ? 'nenhum browser ativo, mas há processo(s) vivo(s) — investigar'
+          : 'esperado: 0 quando ocioso';
+        chromiumCard.classList.toggle('alert', suspeitoDeVazamento);
+      }
+
       document.getElementById('c-active').textContent = data.queue.browsersAtivos;
       document.getElementById('c-limit').textContent = data.queue.limiteConcorrencia;
       document.getElementById('c-pending').textContent = data.queue.naFila;
