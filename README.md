@@ -28,6 +28,70 @@ curl -X POST http://localhost:3000/webhook/visito \
   }'
 ```
 
+## Protegendo /webhook/visito com chave fixa
+
+Diferente da chave diaria do dashboard, aqui e uma chave **fixa** (nao
+muda sozinha) - a mesma que voce configura no n8n pra sempre.
+
+1. No Railway, defina `WEBHOOK_API_KEY` com um valor longo e aleatorio
+   (ex: gere um com `openssl rand -hex 32` ou similar).
+2. No node **HTTP Request** do n8n, adiciona um header:
+   - Nome: `x-api-key`
+   - Valor: o mesmo que voce colocou em `WEBHOOK_API_KEY`
+
+   (tambem aceita `Authorization: Bearer SEU_VALOR`, se preferir esse
+   formato)
+
+Sem o header correto, o `/webhook/visito` responde `401` e nem chega a
+abrir o Puppeteer. Se `WEBHOOK_API_KEY` nao estiver configurado, a rota
+fica bloqueada por padrao (erro `503`) - comportamento seguro por padrao.
+
+## Protegendo /dashboard e /metrics com api key
+
+Como essas rotas mostram dados reais (URLs acessadas, trackIds, uso de
+memoria), elas exigem uma chave de acesso que **muda todo dia sozinha**.
+
+1. Configure no Railway a variavel `DASHBOARD_API_SECRET` com um segredo
+   seu (ex: `goldmine2026x7`).
+2. A chave valida no dia segue o formato `SEU_SEGREDO-AAAAMMDD`.
+   Exemplo: com o segredo acima, em 16/07/2026 a chave e
+   `goldmine2026x7-20260716`.
+3. Acesse assim:
+   ```
+   https://SEU-APP.up.railway.app/dashboard?key=goldmine2026x7-20260716
+   ```
+
+O `/metrics` (usado pelo dashboard por baixo dos panos) aceita a chave
+tanto por `?key=...` quanto pelo header `x-api-key`.
+
+O `/health` continua **sem** proteção de proposito: ele so retorna numeros
+genericos (nada sensivel) e normalmente e usado pelo proprio Railway para
+verificar automaticamente se o servico esta de pe - se ele exigisse chave,
+o Railway poderia achar o serviço "unhealthy" e ficar reiniciando.
+
+Se `DASHBOARD_API_SECRET` nao estiver configurado, essas rotas ficam
+bloqueadas por padrao (retornam erro `503` pedindo pra configurar a
+variavel) - ou seja, o comportamento seguro por padrao e "fechado", nao
+"aberto".
+
+## Dashboard de monitoramento
+
+Alem do `/health`, o servico expoe um painel visual em:
+
+```
+https://SEU-APP.up.railway.app/dashboard
+```
+
+Ele atualiza sozinho a cada 3 segundos e mostra:
+- Uso de memoria (RSS) atual e um grafico dos ultimos ~10 minutos
+- Quantos browsers estao ativos vs. na fila, e o limite configurado
+- Uptime do processo
+- Uma tabela com as ultimas 10 requisicoes: horario, trackId, URL, duracao e status (ok/erro)
+
+Os dados desse painel vem do endpoint `GET /metrics` (JSON puro, caso queira
+consumir de outro lugar). Tudo fica guardado em memoria RAM do processo -
+**zera a cada redeploy/restart**, nao e um historico permanente.
+
 ## Deploy no Railway
 
 1. Suba esta pasta para um repositorio no GitHub (ou use `railway up` direto

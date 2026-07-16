@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>goldmineink · painel de operação</title>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --panel: #121722;
+    --panel-2: #161c29;
+    --border: #212938;
+    --text: #e7ecf3;
+    --text-muted: #7c8798;
+    --teal: #34d3c6;
+    --teal-dim: rgba(52, 211, 198, 0.15);
+    --amber: #f2b84b;
+    --red: #f2596b;
+    --red-dim: rgba(242, 89, 107, 0.12);
+    --violet: #9c8cff;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    background-image:
+      radial-gradient(ellipse 800px 400px at 20% -10%, rgba(52, 211, 198, 0.08), transparent),
+      radial-gradient(ellipse 600px 300px at 90% 0%, rgba(156, 140, 255, 0.06), transparent);
+    color: var(--text);
+    font-family: var(--sans);
+    padding: 32px 24px 64px;
+    min-height: 100vh;
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 28px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .title-block h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 4px;
+    letter-spacing: -0.01em;
+  }
+  .title-block .sub {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .live {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .live .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--teal);
+    box-shadow: 0 0 0 0 rgba(52, 211, 198, 0.6);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(52, 211, 198, 0.55); }
+    70% { box-shadow: 0 0 0 7px rgba(52, 211, 198, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(52, 211, 198, 0); }
+  }
+  .live.stale .dot { background: var(--red); animation: none; }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .card .label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  .card .value {
+    font-family: var(--mono);
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 1;
+  }
+  .card .value .unit {
+    font-size: 13px;
+    color: var(--text-muted);
+    font-weight: 400;
+    margin-left: 4px;
+  }
+  .card .accent-teal .value { color: var(--teal); }
+  .card .accent-violet .value { color: var(--violet); }
+  .card .accent-amber .value { color: var(--amber); }
+  .card .sub-value {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 6px;
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .panel h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin: 0 0 16px;
+    font-weight: 600;
+  }
+
+  #chart-wrap { width: 100%; overflow: hidden; }
+  #chart { width: 100%; height: 180px; display: block; }
+  .chart-empty {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    padding: 40px 0;
+    text-align: center;
+  }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    font-weight: 600;
+    padding: 0 10px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  tbody td {
+    padding: 10px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: var(--panel-2); }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge.ok { background: var(--teal-dim); color: var(--teal); }
+  .badge.err { background: var(--red-dim); color: var(--red); }
+
+  .dur-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .dur-bar-track {
+    width: 90px;
+    height: 5px;
+    background: var(--panel-2);
+    border-radius: 3px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .dur-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--teal), var(--violet));
+    border-radius: 3px;
+  }
+  .dur-bar-fill.err-fill { background: var(--red); }
+
+  .empty-state {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-muted);
+    padding: 24px 4px;
+  }
+
+  .cell-muted { color: var(--text-muted); }
+  .truncate { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  footer {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+    margin-top: 32px;
+  }
+
+  @media (max-width: 640px) {
+    .truncate { max-width: 110px; }
+    .dur-bar-track { width: 50px; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="title-block">
+        <h1>goldmineink · painel de operação</h1>
+        <div class="sub">/webhook/visito — Puppeteer via proxy</div>
+      </div>
+      <div class="live" id="live-indicator">
+        <span class="dot"></span>
+        <span id="live-text">atualizando a cada 3s</span>
+      </div>
+    </header>
+
+    <div class="cards">
+      <div class="card accent-teal">
+        <div class="label">Memória (RSS)</div>
+        <div class="value"><span id="c-rss">—</span><span class="unit">MB</span></div>
+        <div class="sub-value" id="c-heap">heap —</div>
+      </div>
+      <div class="card accent-violet">
+        <div class="label">Browsers ativos</div>
+        <div class="value"><span id="c-active">—</span><span class="unit">/ <span id="c-limit">—</span></span></div>
+        <div class="sub-value" id="c-queue-hint">concorrência</div>
+      </div>
+      <div class="card accent-amber">
+        <div class="label">Na fila</div>
+        <div class="value"><span id="c-pending">—</span></div>
+        <div class="sub-value">aguardando vaga</div>
+      </div>
+      <div class="card">
+        <div class="label">Uptime</div>
+        <div class="value" id="c-uptime">—</div>
+        <div class="sub-value" id="c-updated">—</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Memória (RSS) — últimos ~10 min</h2>
+      <div id="chart-wrap">
+        <svg id="chart" viewBox="0 0 1000 180" preserveAspectRatio="none"></svg>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Últimas requisições</h2>
+      <div id="table-wrap">
+        <div class="empty-state">Nenhuma requisição registrada ainda desde o último deploy.</div>
+      </div>
+    </div>
+
+    <footer>dados em memória do processo — zeram a cada redeploy/restart</footer>
+  </div>
+
+<script>
+  const POLL_MS = 3000;
+  const liveEl = document.getElementById('live-indicator');
+  const liveTextEl = document.getElementById('live-text');
+  let missedPolls = 0;
+
+  // Pega a chave da propria URL do dashboard (?key=SEU_SEGREDO-AAAAMMDD)
+  // e reenvia em toda chamada ao /metrics.
+  const apiKey = new URLSearchParams(window.location.search).get('key') || '';
+
+  function showAuthError() {
+    document.body.innerHTML = `
+      <div style="max-width:480px;margin:80px auto;text-align:center;font-family:var(--sans);color:var(--text);padding:0 20px;">
+        <div style="font-size:15px;font-weight:600;margin-bottom:8px;">Acesso negado</div>
+        <div style="font-family:var(--mono);font-size:13px;color:var(--text-muted);line-height:1.6;">
+          A chave enviada nao e valida (ela muda todo dia).<br/>
+          Acesse com <code>?key=SEU_SEGREDO-AAAAMMDD</code> na URL.
+        </div>
+      </div>
+    `;
+  }
+
+  function fmtTime(iso) {
+    const d = new Date(iso);
+    return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
+  function fmtUptime(seconds) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  }
+
+  function renderChart(history) {
+    const svg = document.getElementById('chart');
+    const wrap = document.getElementById('chart-wrap');
+
+    if (!history || history.length < 2) {
+      svg.innerHTML = '';
+      wrap.querySelector('.chart-empty')?.remove();
+      const empty = document.createElement('div');
+      empty.className = 'chart-empty';
+      empty.textContent = 'Coletando amostras de memória...';
+      wrap.appendChild(empty);
+      return;
+    }
+    wrap.querySelector('.chart-empty')?.remove();
+
+    const W = 1000, H = 180, PAD = 8;
+    const values = history.map(p => p.rssMB);
+    const max = Math.max(...values) * 1.15;
+    const min = 0;
+    const range = max - min || 1;
+
+    const stepX = (W - PAD * 2) / (history.length - 1);
+    const points = history.map((p, i) => {
+      const x = PAD + i * stepX;
+      const y = H - PAD - ((p.rssMB - min) / range) * (H - PAD * 2);
+      return [x, y];
+    });
+
+    const linePath = points.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(' ');
+    const areaPath = `${linePath} L${points[points.length - 1][0]},${H - PAD} L${points[0][0]},${H - PAD} Z`;
+
+    // linhas de grade horizontais (25/50/75/100%)
+    let gridLines = '';
+    for (let f = 0.25; f < 1; f += 0.25) {
+      const y = H - PAD - f * (H - PAD * 2);
+      gridLines += `<line x1="${PAD}" y1="${y}" x2="${W - PAD}" y2="${y}" stroke="#212938" stroke-width="1" stroke-dasharray="4 4" />`;
+    }
+
+    const lastPoint = points[points.length - 1];
+
+    svg.innerHTML = `
+      <defs>
+        <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#34d3c6" stop-opacity="0.35" />
+          <stop offset="100%" stop-color="#34d3c6" stop-opacity="0" />
+        </linearGradient>
+      </defs>
+      ${gridLines}
+      <path d="${areaPath}" fill="url(#areaFill)" />
+      <path d="${linePath}" fill="none" stroke="#34d3c6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" />
+      <circle cx="${lastPoint[0]}" cy="${lastPoint[1]}" r="3.5" fill="#34d3c6" />
+    `;
+  }
+
+  function renderTable(requests) {
+    const wrap = document.getElementById('table-wrap');
+    if (!requests || requests.length === 0) {
+      wrap.innerHTML = '<div class="empty-state">Nenhuma requisição registrada ainda desde o último deploy.</div>';
+      return;
+    }
+
+    const maxDuration = Math.max(...requests.map(r => r.durationMs || 0), 1);
+
+    const rows = requests.map(r => {
+      const pct = Math.min(100, Math.round(((r.durationMs || 0) / maxDuration) * 100));
+      const badge = r.success
+        ? '<span class="badge ok">ok</span>'
+        : '<span class="badge err">erro</span>';
+      const barClass = r.success ? 'dur-bar-fill' : 'dur-bar-fill err-fill';
+      const trackId = r.trackId ? r.trackId.slice(0, 18) + (r.trackId.length > 18 ? '…' : '') : '—';
+      const url = r.url ? r.url.replace(/^https?:\/\//, '') : '—';
+
+      return `
+        <tr>
+          <td class="cell-muted">${fmtTime(new Date(r.startedAt).toISOString())}</td>
+          <td class="truncate" title="${r.trackId || ''}">${trackId}</td>
+          <td class="truncate" title="${r.url || ''}">${url}</td>
+          <td>
+            <div class="dur-bar-wrap">
+              <div class="dur-bar-track"><div class="${barClass}" style="width:${pct}%"></div></div>
+              <span>${(r.durationMs / 1000).toFixed(1)}s</span>
+            </div>
+          </td>
+          <td>${badge}</td>
+          <td class="cell-muted">${r.browsersAtivos}/${r.naFila === 0 ? '0' : r.naFila} na fila</td>
+        </tr>
+      `;
+    }).join('');
+
+    wrap.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>Horário</th>
+            <th>Track ID</th>
+            <th>URL</th>
+            <th>Duração</th>
+            <th>Status</th>
+            <th>Fila no momento</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  }
+
+  async function poll() {
+    try {
+      const res = await fetch('/metrics', {
+        cache: 'no-store',
+        headers: { 'x-api-key': apiKey },
+      });
+
+      if (res.status === 401 || res.status === 503) {
+        showAuthError();
+        return;
+      }
+      if (!res.ok) throw new Error('resposta nao-ok');
+      const data = await res.json();
+
+      document.getElementById('c-rss').textContent = data.memoriaAtualMB.rss;
+      document.getElementById('c-heap').textContent = `heap ${data.memoriaAtualMB.heapUsed} / ${data.memoriaAtualMB.heapTotal} MB`;
+      document.getElementById('c-active').textContent = data.queue.browsersAtivos;
+      document.getElementById('c-limit').textContent = data.queue.limiteConcorrencia;
+      document.getElementById('c-pending').textContent = data.queue.naFila;
+      document.getElementById('c-uptime').textContent = fmtUptime(data.uptimeSegundos);
+      document.getElementById('c-updated').textContent = 'atualizado ' + fmtTime(data.timestamp);
+
+      renderChart(data.memoryHistory);
+      renderTable(data.recentRequests);
+
+      missedPolls = 0;
+      liveEl.classList.remove('stale');
+      liveTextEl.textContent = 'atualizando a cada 3s';
+    } catch (e) {
+      missedPolls += 1;
+      liveEl.classList.add('stale');
+      liveTextEl.textContent = missedPolls > 1 ? 'sem conexão com o servidor' : 'tentando reconectar...';
+    }
+  }
+
+  poll();
+  setInterval(poll, POLL_MS);
+</script>
+</body>
+</html>
