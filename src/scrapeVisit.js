@@ -1,4 +1,6 @@
 const puppeteer = require('puppeteer-core');
+const { createPeakMemoryTracker } = require('./processTreeMemory');
+const { attachNetworkTracker, round1 } = require('./networkTracker');
 
 // ----------------------------------------------------
 // Configuracoes vindas de variaveis de ambiente
@@ -61,6 +63,11 @@ async function scrapeVisit(payload) {
 
   let browser;
   let page;
+  let peakTracker;
+  let peakMemoryMB = null;
+  let networkTracker;
+  let networkBytes = 0;
+  let networkRequestCount = 0;
 
   try {
     // ----------------------------------------------------
@@ -80,9 +87,19 @@ async function scrapeVisit(payload) {
       ],
     });
 
+    // Comeca a medir o pico de memoria (Chromium principal + todos os
+    // processos filhos dele: renderer, gpu, etc) desta navegacao
+    // especifica, isolado de qualquer outro browser rodando em paralelo.
+    peakTracker = createPeakMemoryTracker(browser.process()?.pid);
+
     page = await browser.newPage();
     page.setDefaultNavigationTimeout(NAV_TIMEOUT_MS);
     await page.setUserAgent(userAgent);
+
+    // Comeca a somar os bytes reais trafegados (via CDP) por essa pagina,
+    // do inicio ao fim da navegacao inteira - e o numero mais proximo do
+    // que o proxy realmente cobra por trafego.
+    networkTracker = await attachNetworkTracker(page);
 
     // Autenticacao do proxy
     await page.authenticate({
@@ -140,6 +157,15 @@ async function scrapeVisit(payload) {
 
     pageTitle = await page.title();
 
+    peakMemoryMB = peakTracker ? await peakTracker.stop() : null;
+
+    if (networkTracker) {
+      const totals = networkTracker.getTotals();
+      networkBytes = totals.totalBytes;
+      networkRequestCount = totals.requestCount;
+      await networkTracker.detach();
+    }
+
     return {
       data: {
         geo: ipGeo,
@@ -152,10 +178,26 @@ async function scrapeVisit(payload) {
         selectorCTA,
         userAgentUsed: userAgent,
         clickTime,
+        peakMemoryMB, // maior uso de memoria (MB) do browser durante esta navegacao
+        networkKB: round1(networkBytes / 1024), // trafego real (bytes via CDP) da navegacao inteira
+        networkRequestCount, // quantas requisicoes de rede foram feitas
       },
       trackId,
       proxyUserCity,
     };
+  } catch (err) {
+    // mesmo em erro, guarda o pico de memoria e o trafego medidos ate aqui -
+    // util pra saber se a falha teve relacao com consumo alto de recursos
+    if (peakTracker) {
+      peakMemoryMB = await peakTracker.stop().catch(() => null);
+    }
+    if (networkTracker) {
+      networkBytes = networkTracker.getTotals().totalBytes;
+      await networkTracker.detach().catch(() => {});
+    }
+    err.peakMemoryMB = peakMemoryMB;
+    err.networkKB = round1(networkBytes / 1024);
+    throw err;
   } finally {
     // Garante que a pagina e o browser SEMPRE fecham, mesmo se algo der erro
     // (isso e o que provavelmente estava causando os crashes por acumulo de

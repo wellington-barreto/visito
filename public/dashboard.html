@@ -277,6 +277,16 @@
         <div class="value"><span id="c-chromium">—</span></div>
         <div class="sub-value" id="c-chromium-hint">esperado: 0 quando ocioso</div>
       </div>
+      <div class="card">
+        <div class="label">Média por navegação</div>
+        <div class="value"><span id="c-avg-peak">—</span><span class="unit">MB</span></div>
+        <div class="sub-value" id="c-avg-peak-hint">últimas requisições</div>
+      </div>
+      <div class="card accent-teal">
+        <div class="label">Tráfego total (proxy)</div>
+        <div class="value"><span id="c-traffic-total">—</span><span class="unit">MB</span></div>
+        <div class="sub-value" id="c-traffic-hint">desde o último deploy</div>
+      </div>
       <div class="card accent-violet">
         <div class="label">Browsers ativos</div>
         <div class="value"><span id="c-active">—</span><span class="unit">/ <span id="c-limit">—</span></span></div>
@@ -349,6 +359,11 @@
     if (h > 0) return `${h}h ${m}m`;
     if (m > 0) return `${m}m ${s}s`;
     return `${s}s`;
+  }
+
+  function formatKB(kb) {
+    if (kb >= 1024) return `${(kb / 1024).toFixed(2)} MB`;
+    return `${kb.toFixed(0)} KB`;
   }
 
   function renderChart(history) {
@@ -426,6 +441,12 @@
       const barClass = r.success ? 'dur-bar-fill' : 'dur-bar-fill err-fill';
       const trackId = r.trackId ? r.trackId.slice(0, 18) + (r.trackId.length > 18 ? '…' : '') : '—';
       const url = r.url ? r.url.replace(/^https?:\/\//, '') : '—';
+      const peakMem = (r.peakMemoryMB !== null && r.peakMemoryMB !== undefined)
+        ? `${r.peakMemoryMB.toFixed(1)} MB`
+        : '—';
+      const traffic = (r.networkKB !== null && r.networkKB !== undefined)
+        ? formatKB(r.networkKB)
+        : '—';
 
       return `
         <tr>
@@ -438,6 +459,8 @@
               <span>${(r.durationMs / 1000).toFixed(1)}s</span>
             </div>
           </td>
+          <td class="cell-muted">${peakMem}</td>
+          <td class="cell-muted">${traffic}</td>
           <td>${badge}</td>
           <td class="cell-muted">${r.browsersAtivos}/${r.naFila === 0 ? '0' : r.naFila} na fila</td>
         </tr>
@@ -452,6 +475,8 @@
             <th>Track ID</th>
             <th>URL</th>
             <th>Duração</th>
+            <th>Pico Memória</th>
+            <th>Tráfego</th>
             <th>Status</th>
             <th>Fila no momento</th>
           </tr>
@@ -507,8 +532,23 @@
       document.getElementById('c-uptime').textContent = fmtUptime(data.uptimeSegundos);
       document.getElementById('c-updated').textContent = 'atualizado ' + fmtTime(data.timestamp);
 
+      document.getElementById('c-traffic-total').textContent = data.trafego.totalMB.toFixed(2);
+      document.getElementById('c-traffic-hint').textContent = `${data.trafego.totalRequisicoes} requisição(ões) desde o último deploy`;
+
       renderChart(data.memoryHistory);
       renderTable(data.recentRequests);
+
+      const peaks = (data.recentRequests || [])
+        .map(r => r.peakMemoryMB)
+        .filter(v => v !== null && v !== undefined);
+      if (peaks.length > 0) {
+        const avg = peaks.reduce((a, b) => a + b, 0) / peaks.length;
+        document.getElementById('c-avg-peak').textContent = avg.toFixed(1);
+        document.getElementById('c-avg-peak-hint').textContent = `${peaks.length} navegação(ões) medida(s)`;
+      } else {
+        document.getElementById('c-avg-peak').textContent = '—';
+        document.getElementById('c-avg-peak-hint').textContent = 'sem dados ainda';
+      }
 
       missedPolls = 0;
       liveEl.classList.remove('stale');

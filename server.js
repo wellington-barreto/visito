@@ -105,6 +105,8 @@ app.post('/webhook/visito', requireFixedApiKey, async (req, res) => {
       startedAt,
       durationMs,
       success: true,
+      peakMemoryMB: result.data?.peakMemoryMB ?? null,
+      networkKB: result.data?.networkKB ?? null,
       browsersAtivos: browserQueue.active,
       naFila: browserQueue.pending,
     });
@@ -121,6 +123,8 @@ app.post('/webhook/visito', requireFixedApiKey, async (req, res) => {
       durationMs,
       success: false,
       errorMessage: err.message,
+      peakMemoryMB: err.peakMemoryMB ?? null,
+      networkKB: err.networkKB ?? null,
       browsersAtivos: browserQueue.active,
       naFila: browserQueue.pending,
     });

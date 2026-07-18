@@ -16,9 +16,13 @@ class MetricsStore {
     this.maxMemorySamples = maxMemorySamples;
     this.requests = []; // mais recente primeiro
     this.memorySamples = []; // mais antiga primeiro (ordem cronologica, bom pra grafico)
+    // Total acumulado de trafego (KB) desde que o processo subiu - zera a
+    // cada redeploy/restart, igual o resto das metricas.
+    this.totalNetworkKB = 0;
+    this.totalRequestsCount = 0;
   }
 
-  recordRequest({ trackId, url, startedAt, durationMs, success, errorMessage, browsersAtivos, naFila }) {
+  recordRequest({ trackId, url, startedAt, durationMs, success, errorMessage, peakMemoryMB, networkKB, browsersAtivos, naFila }) {
     this.requests.unshift({
       trackId: trackId || null,
       url: url || null,
@@ -26,11 +30,18 @@ class MetricsStore {
       durationMs,
       success,
       errorMessage: errorMessage || null,
+      peakMemoryMB: peakMemoryMB ?? null,
+      networkKB: networkKB ?? null,
       browsersAtivos,
       naFila,
     });
     if (this.requests.length > this.maxRequests) {
       this.requests.length = this.maxRequests;
+    }
+
+    this.totalRequestsCount += 1;
+    if (networkKB !== null && networkKB !== undefined) {
+      this.totalNetworkKB = round1(this.totalNetworkKB + networkKB);
     }
   }
 
@@ -81,6 +92,12 @@ class MetricsStore {
       uptimeSegundos: Math.round(process.uptime()),
       memoryHistory: this.memorySamples,
       recentRequests: this.requests,
+      trafego: {
+        // total acumulado desde o ultimo deploy/restart (nao e persistido)
+        totalKB: this.totalNetworkKB,
+        totalMB: round1(this.totalNetworkKB / 1024),
+        totalRequisicoes: this.totalRequestsCount,
+      },
     };
   }
 }
